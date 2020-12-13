@@ -288,7 +288,8 @@ class InstaloaderContext:
     def do_sleep(self):
         """Sleep a short time if self.sleep is set. Called before each request to instagram.com."""
         if self.sleep:
-            time.sleep(min(random.expovariate(0.7), 5.0))
+            time.sleep(20)
+            #time.sleep(min(random.expovariate(0.7), 5.0))
 
     def get_json(self, path: str, params: Dict[str, Any], host: str = 'www.instagram.com',
                  session: Optional[requests.Session] = None, _attempt=1) -> Dict[str, Any]:
