@@ -160,6 +160,7 @@ class Instaloader:
     :param rate_controller: Generator for a :class:`RateController` to override rate controlling behavior
     :param resume_prefix: :option:`--resume-prefix`, or None for :option:`--no-resume`.
     :param check_resume_bbd: Whether to check the date of expiry of resume files and reject them if expired.
+    :param correct_timestamps: :option:`--correct-timestamps`
 
     .. attribute:: context
 
@@ -185,7 +186,8 @@ class Instaloader:
                  request_timeout: float = 300.0,
                  rate_controller: Optional[Callable[[InstaloaderContext], RateController]] = None,
                  resume_prefix: Optional[str] = "iterator",
-                 check_resume_bbd: bool = True):
+                 check_resume_bbd: bool = True,
+                 correct_timestamps: bool = False):
 
         self.context = InstaloaderContext(sleep, quiet, user_agent, max_connection_attempts,
                                           request_timeout, rate_controller)
@@ -206,6 +208,7 @@ class Instaloader:
             else storyitem_metadata_txt_pattern
         self.resume_prefix = resume_prefix
         self.check_resume_bbd = check_resume_bbd
+        self.correct_timestamps = correct_timestamps
 
     @contextmanager
     def anonymous_copy(self):
@@ -228,7 +231,8 @@ class Instaloader:
             max_connection_attempts=self.context.max_connection_attempts,
             request_timeout=self.context.request_timeout,
             resume_prefix=self.resume_prefix,
-            check_resume_bbd=self.check_resume_bbd)
+            check_resume_bbd=self.check_resume_bbd,
+            correct_timestamps=self.correct_timestamps)
         yield new_loader
         self.context.error_log.extend(new_loader.context.error_log)
         new_loader.context.error_log = []  # avoid double-printing of errors
@@ -255,7 +259,15 @@ class Instaloader:
             filename += '_' + filename_suffix
         filename += '.' + file_extension
         if os.path.isfile(filename):
-            self.context.log(filename + ' exists', end=' ', flush=True)
+            if self.correct_timestamps:
+                ftime = os.path.getmtime(filename)
+                if ftime != mtime.timestamp():
+                    os.utime(filename, (datetime.now().timestamp(), mtime.timestamp()))
+                    self.context.log(filename + ' exists, updated time', end=' ', flush=True)
+                else:
+                    self.context.log(filename + ' exists', end=' ', flush=True)
+            else:
+                self.context.log(filename + ' exists', end=' ', flush=True)
             return False
         self.context.get_and_write_raw(url, filename)
         os.utime(filename, (datetime.now().timestamp(), mtime.timestamp()))

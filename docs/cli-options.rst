@@ -254,6 +254,11 @@ Miscellaneous Options
    if login credentials are needed but not given.
    This is handy for running :ref:`instaloader-as-cronjob`.
 
+   option:: --correct-timestamps
+
+   Set the modification dates of already downloaded files to the post's date.
+   This is handy for updating backups downloaded with erroneous tools.
+
 .. option:: +args.txt
 
    Read arguments from file `args.txt`, a shortcut to provide arguments from
