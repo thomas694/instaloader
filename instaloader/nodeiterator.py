@@ -83,6 +83,8 @@ class NodeIterator(Iterator[T]):
         self._query_referer = query_referer
         self._page_index = 0
         self._total_index = 0
+        self._resume_file_path = None
+        self._save_iterator = None
         if first_data is not None:
             self._data = first_data
             self._best_before = datetime.now() + NodeIterator._shelf_life
@@ -94,6 +96,10 @@ class NodeIterator(Iterator[T]):
         if after is not None:
             pagination_variables['after'] = after
         try:
+            if self.resume_file_path is not None:
+                if os.path.dirname(self.resume_file_path):
+                    os.makedirs(os.path.dirname(self.resume_file_path), exist_ok=True)
+                self.save_iterator(self.freeze(), self.resume_file_path)
             data = self._edge_extractor(
                 self._context.graphql_query(
                     self._query_hash, {**self._query_variables, **pagination_variables}, self._query_referer
@@ -136,6 +142,22 @@ class NodeIterator(Iterator[T]):
                 raise
             return self.__next__()
         raise StopIteration()
+
+    @property
+    def save_iterator(self) -> Optional[Callable[[FrozenNodeIterator, str], None]]:
+        return self._save_iterator
+
+    @save_iterator.setter
+    def save_iterator(self, val):
+        self._save_iterator = val
+
+    @property
+    def resume_file_path(self) -> Optional[Callable[[str], str]]:
+        return self._resume_file_path
+
+    @resume_file_path.setter
+    def resume_file_path(self, val):
+        self._resume_file_path = val
 
     @property
     def count(self) -> Optional[int]:
@@ -246,6 +268,8 @@ def resumable_iteration(context: InstaloaderContext,
     is_resuming = False
     start_index = 0
     resume_file_path = format_path(iterator.magic)
+    iterator.resume_file_path = format_path(iterator.magic)
+    iterator.save_iterator = save
     resume_file_exists = os.path.isfile(resume_file_path)
     if resume_file_exists:
         try:
