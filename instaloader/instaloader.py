@@ -591,9 +591,9 @@ class Instaloader:
                         post.get_sidecar_nodes(self.slide_start, self.slide_end),
                         start=post.mediacount if self.slide_start < 0 else self.slide_start + 1
                 ):
-                    suffix = str(edge_number)
+                    suffix = str(edge_number)  # type: Optional[str]
                     if '{filename}' in self.filename_pattern:
-                        suffix = ''
+                        suffix = None
                     if self.download_pictures and (not sidecar_node.is_video or self.download_video_thumbnails):
                         # pylint:disable=cell-var-from-loop
                         sidecar_filename = self.__prepare_filename(filename_template, lambda: sidecar_node.display_url)
