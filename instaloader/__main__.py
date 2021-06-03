@@ -5,12 +5,12 @@ import datetime
 import os
 import re
 import sys
-from argparse import ArgumentParser, SUPPRESS
+from argparse import ArgumentParser, ArgumentTypeError, SUPPRESS
 from typing import List, Optional
 
-from . import (Instaloader, InstaloaderException, InvalidArgumentException, Post, Profile, ProfileNotExistsException,
-               StoryItem, __version__, load_structure_from_file, TwoFactorAuthRequiredException,
-               BadCredentialsException)
+from . import (AbortDownloadException, BadCredentialsException, Instaloader, InstaloaderException,
+               InvalidArgumentException, Post, Profile, ProfileNotExistsException, StoryItem,
+               TwoFactorAuthRequiredException, __version__, load_structure_from_file)
 from .instaloader import get_default_session_filename
 from .instaloadercontext import default_user_agent
 
@@ -25,6 +25,14 @@ def usage_string():
 {2:{1}} [--login YOUR-USERNAME] [--fast-update]
 {2:{1}} profile | "#hashtag" | %%location_id | :stories | :feed | :saved
 {0} --help""".format(argv0, len(argv0), '')
+
+
+def http_status_code_list(code_list_str: str) -> List[int]:
+    codes = [int(s) for s in code_list_str.split(',')]
+    for code in codes:
+        if not 100 <= code <= 599:
+            raise ArgumentTypeError("Invalid HTTP status code: {}".format(code))
+    return codes
 
 
 def filterstr_to_filterfunc(filter_str: str, item_type: type):
@@ -199,7 +207,7 @@ def _main(instaloader: Instaloader, targetlist: List[str],
             instaloader.context.log("Downloading {} profiles: {}".format(len(profiles),
                                                                          ' '.join([p.username for p in profiles])))
         if profiles and (download_profile_pic or download_posts) and not instaloader.context.is_logged_in:
-            instaloader.context.error("Warning: Use --login to download higher-quality versions of pictures.")
+            instaloader.context.log("Hint: Use --login to download higher-quality versions of pictures.")
         instaloader.download_profiles(profiles,
                                       download_profile_pic, download_posts, download_tagged, download_igtv,
                                       download_highlights, download_stories,
@@ -213,6 +221,8 @@ def _main(instaloader: Instaloader, targetlist: List[str],
                                                    fast_update=fast_update, post_filter=post_filter)
     except KeyboardInterrupt:
         print("\nInterrupted by user.", file=sys.stderr)
+    except AbortDownloadException as exc:
+        print("\nDownload aborted: {}.".format(exc), file=sys.stderr)
     # Save session if it is useful
     if instaloader.context.is_logged_in:
         instaloader.save_session_to_file(sessionfile)
@@ -325,7 +335,7 @@ def main():
 
     g_cond.add_argument('-c', '--count',
                         help='Do not attempt to download more than COUNT posts. '
-                             'Applies only to #hashtag and :feed.')
+                             'Applies to #hashtag, %%location_id, :feed, and :saved.')
 
     g_login = parser.add_argument_group('Login (Download Private Profiles)',
                                         'Instaloader can login to Instagram. This allows downloading private profiles. '
@@ -369,6 +379,9 @@ def main():
     g_how.add_argument('--commit-mode', action='store_true', help=SUPPRESS)
     g_how.add_argument('--request-timeout', metavar='N', type=float, default=300.0,
                        help='Seconds to wait before timing out a connection request. Defaults to 300.')
+    g_how.add_argument('--abort-on', type=http_status_code_list, metavar="STATUS_CODES",
+                       help='Comma-separated list of HTTP status codes that cause Instaloader to abort, bypassing all '
+                            'retry logic.')
 
     g_misc = parser.add_argument_group('Miscellaneous Options')
     g_misc.add_argument('--correct-timestamps', action='store_true',
@@ -431,6 +444,7 @@ def main():
                              resume_prefix=resume_prefix,
                              check_resume_bbd=not args.use_aged_resume_files,
                              slide=args.slide,
+                             fatal_status_codes=args.abort_on,
                              correct_timestamps=args.correct_timestamps)
         _main(loader,
               args.profile,
@@ -449,7 +463,7 @@ def main():
               storyitem_filter_str=args.storyitem_filter)
         loader.close()
     except InstaloaderException as err:
-        raise SystemExit("Fatal error: %s" % err)
+        raise SystemExit("Fatal error: %s" % err) from err
 
 
 if __name__ == "__main__":

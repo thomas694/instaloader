@@ -5,9 +5,9 @@ import os
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from lzma import LZMAError
-from typing import Any, Callable, Dict, Iterator, NamedTuple, Optional, Tuple, TypeVar
+from typing import Any, Callable, Dict, Iterable, Iterator, NamedTuple, Optional, Tuple, TypeVar
 
-from .exceptions import InvalidArgumentException, QueryReturnedBadRequestException
+from .exceptions import AbortDownloadException, InvalidArgumentException, QueryReturnedBadRequestException
 from .instaloadercontext import InstaloaderContext
 
 FrozenNodeIterator = NamedTuple('FrozenNodeIterator',
@@ -18,8 +18,6 @@ FrozenNodeIterator = NamedTuple('FrozenNodeIterator',
                                  ('total_index', int),
                                  ('best_before', Optional[float]),
                                  ('remaining_data', Optional[Dict])])
-FrozenNodeIterator.__doc__ = \
-    """A serializable representation of a :class:`NodeIterator` instance, saving its iteration state."""
 FrozenNodeIterator.query_hash.__doc__ = """The GraphQL ``query_hash`` parameter."""
 FrozenNodeIterator.query_variables.__doc__ = """The GraphQL ``query_variables`` parameter."""
 FrozenNodeIterator.query_referer.__doc__ = """The HTTP referer used for the GraphQL query."""
@@ -54,6 +52,9 @@ class NodeIterator(Iterator[T]):
 
        post_iterator = profile.get_posts()
        post_iterator.thaw(load("resume_information.json"))
+
+    (an appropriate method to load and save the :class:`FrozenNodeIterator` is e.g.
+    :func:`load_structure_from_file` and :func:`save_structure_to_file`.)
 
     A :class:`FrozenNodeIterator` can only be thawn with a matching NodeIterator, i.e. a NodeIterator instance that has
     been constructed with the same parameters as the instance that is represented by the :class:`FrozenNodeIterator` in
@@ -172,11 +173,7 @@ class NodeIterator(Iterator[T]):
     @property
     def magic(self) -> str:
         """Magic string for easily identifying a matching iterator file for resuming (hash of some parameters)."""
-        if 'blake2b' not in hashlib.algorithms_available:
-            magic_hash = hashlib.new('sha224')
-        else:
-            # Use blake2b when possible, i.e. on Python >= 3.6.
-            magic_hash = hashlib.blake2b(digest_size=6)  # type:ignore  # pylint: disable=no-member
+        magic_hash = hashlib.blake2b(digest_size=6)
         magic_hash.update(json.dumps(
             [self._query_hash, self._query_variables, self._query_referer, self._context.username]
         ).encode())
@@ -226,14 +223,15 @@ class NodeIterator(Iterator[T]):
 
 @contextmanager
 def resumable_iteration(context: InstaloaderContext,
-                        iterator: Iterator,
+                        iterator: Iterable,
                         load: Callable[[InstaloaderContext, str], Any],
                         save: Callable[[FrozenNodeIterator, str], None],
                         format_path: Callable[[str], str],
                         check_bbd: bool = True,
                         enabled: bool = True) -> Iterator[Tuple[bool, int]]:
     """
-    High-level context manager to handle a resumable iteration that can be interrupted with a KeyboardInterrupt.
+    High-level context manager to handle a resumable iteration that can be interrupted
+    with a :class:`KeyboardInterrupt` or an :class:`AbortDownloadException`.
 
     It can be used as follows to automatically load a previously-saved state into the iterator, save the iterator's
     state when interrupted, and delete the resume file upon completion::
@@ -261,6 +259,9 @@ def resumable_iteration(context: InstaloaderContext,
     :param format_path: Returns the path to the resume file for the given magic.
     :param check_bbd: Whether to check the best before date and reject an expired FrozenNodeIterator.
     :param enabled: Set to False to disable all functionality and simply execute the inner body.
+
+    .. versionchanged:: 4.7
+       Also interrupt on :class:`AbortDownloadException`.
     """
     if not enabled or not isinstance(iterator, NodeIterator):
         yield False, 0
@@ -286,7 +287,7 @@ def resumable_iteration(context: InstaloaderContext,
             context.error("Warning: Not resuming from {}: {}".format(resume_file_path, exc))
     try:
         yield is_resuming, start_index
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, AbortDownloadException):
         if os.path.dirname(resume_file_path):
             os.makedirs(os.path.dirname(resume_file_path), exist_ok=True)
         save(iterator.freeze(), resume_file_path)

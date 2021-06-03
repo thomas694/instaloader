@@ -74,7 +74,7 @@ So far they are:
 
 .. |downloads| image:: https://pepy.tech/badge/instaloader/month
    :alt: PyPI Download Count
-   :target: https://pepy.tech/project/instaloader/month
+   :target: https://pepy.tech/project/instaloader
 
 .. badges-end
 
@@ -129,7 +129,9 @@ To later **update your local copy** of that profiles, you may run
     instaloader --fast-update profile [profile ...]
 
 If ``--fast-update`` is given, Instaloader stops when arriving at the
-first already-downloaded picture. When updating profiles, Instaloader
+first already-downloaded picture.
+
+When updating profiles, Instaloader
 automatically **detects profile name changes** and renames the target directory
 accordingly.
 

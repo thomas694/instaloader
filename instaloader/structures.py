@@ -4,7 +4,7 @@ import re
 from base64 import b64decode, b64encode
 from collections import namedtuple
 from datetime import datetime
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Union
 
 from . import __version__
 from .exceptions import *
@@ -253,7 +253,7 @@ class Post:
         if self.typename == "GraphImage" and self._context.is_logged_in:
             try:
                 orig_url = self._iphone_struct['image_versions2']['candidates'][0]['url']
-                url = re.sub(r'&se=\d+(&?)', r'\1', orig_url)
+                url = re.sub(r'([?&])se=\d+&?', r'\1', orig_url).rstrip('&')
                 return url
             except (InstaloaderException, KeyError, IndexError) as err:
                 self._context.error('{} Unable to fetch high quality image version of {}.'.format(err, self))
@@ -275,6 +275,17 @@ class Post:
             edges = self._field('edge_sidecar_to_children', 'edges')
             return len(edges)
         return 1
+
+    def get_is_videos(self) -> List[bool]:
+        """
+        Return a list containing the ``is_video`` property for each media in the post.
+
+        .. versionadded:: 4.7
+        """
+        if self.typename == 'GraphSidecar':
+            edges = self._field('edge_sidecar_to_children', 'edges')
+            return [edge['node']['is_video'] for edge in edges]
+        return [self.is_video]
 
     @property
     def has_sidecar_video(self) -> bool:
@@ -298,13 +309,13 @@ class Post:
         """
         if self.typename == 'GraphSidecar':
             edges = self._field('edge_sidecar_to_children', 'edges')
-            if any(edge['node']['is_video'] and 'video_url' not in edge['node'] for edge in edges):
-                # video_url is only present in full metadata, issue #558.
-                edges = self._full_metadata['edge_sidecar_to_children']['edges']
             if end < 0:
                 end = len(edges)-1
             if start < 0:
                 start = len(edges)-1
+            if any(edge['node']['is_video'] and 'video_url' not in edge['node'] for edge in edges[start:(end+1)]):
+                # video_url is only present in full metadata, issue #558.
+                edges = self._full_metadata['edge_sidecar_to_children']['edges']
             for idx, edge in enumerate(edges):
                 if start <= idx <= end:
                     node = edge['node']
@@ -314,7 +325,7 @@ class Post:
                         try:
                             carousel_media = self._iphone_struct['carousel_media']
                             orig_url = carousel_media[idx]['image_versions2']['candidates'][0]['url']
-                            display_url = re.sub(r'&se=\d+(&?)', r'\1', orig_url)
+                            display_url = re.sub(r'([?&])se=\d+&?', r'\1', orig_url).rstrip('&')
                         except (InstaloaderException, KeyError, IndexError) as err:
                             self._context.error('{} Unable to fetch high quality image version of {}.'.format(
                                 err, self))
@@ -432,12 +443,15 @@ class Post:
         except KeyError:
             return self._field('edge_media_to_comment', 'count')
 
-    def get_comments(self) -> Iterator[PostComment]:
+    def get_comments(self) -> Iterable[PostComment]:
         r"""Iterate over all comments of the post.
 
         Each comment is represented by a PostComment namedtuple with fields text (string), created_at (datetime),
         id (int), owner (:class:`Profile`) and answers (:class:`~typing.Iterator`\ [:class:`PostCommentAnswer`])
         if available.
+
+        .. versionchanged:: 4.7
+           Change return type to ``Iterable``.
         """
         def _postcommentanswer(node):
             return PostCommentAnswer(id=int(node['id']),
@@ -472,16 +486,15 @@ class Post:
                                answers=_postcommentanswers(node))
         if self.comments == 0:
             # Avoid doing additional requests if there are no comments
-            return
+            return []
 
         comment_edges = self._field('edge_media_to_comment', 'edges')
         answers_count = sum([edge['node'].get('edge_threaded_comments', {}).get('count', 0) for edge in comment_edges])
 
         if self.comments == len(comment_edges) + answers_count:
             # If the Post's metadata already contains all parent comments, don't do GraphQL requests to obtain them
-            yield from (_postcomment(comment['node']) for comment in comment_edges)
-            return
-        yield from NodeIterator(
+            return [_postcomment(comment['node']) for comment in comment_edges]
+        return NodeIterator(
             self._context,
             '97b41c52301f77ce508f55e66d17620e',
             lambda d: d['data']['shortcode_media']['edge_media_to_parent_comment'],
@@ -1086,7 +1099,7 @@ class StoryItem:
         if self.typename == "GraphStoryImage" and self._context.is_logged_in:
             try:
                 orig_url = self._iphone_struct['image_versions2']['candidates'][0]['url']
-                url = re.sub(r'&se=\d+(&?)', r'\1', orig_url)
+                url = re.sub(r'([?&])se=\d+&?', r'\1', orig_url).rstrip('&')
                 return url
             except (InstaloaderException, KeyError, IndexError) as err:
                 self._context.error('{} Unable to fetch high quality image version of {}.'.format(err, self))
@@ -1539,8 +1552,8 @@ JsonExportable = Union[Post, Profile, StoryItem, Hashtag, FrozenNodeIterator]
 
 
 def save_structure_to_file(structure: JsonExportable, filename: str) -> None:
-    """Saves a :class:`Post`, :class:`Profile`, :class:`StoryItem` or :class:`Hashtag` to a '.json' or '.json.xz' file
-    such that it can later be loaded by :func:`load_structure_from_file`.
+    """Saves a :class:`Post`, :class:`Profile`, :class:`StoryItem`, :class:`Hashtag` or :class:`FrozenNodeIterator` to a
+    '.json' or '.json.xz' file such that it can later be loaded by :func:`load_structure_from_file`.
 
     If the specified filename ends in '.xz', the file will be LZMA compressed. Otherwise, a pretty-printed JSON file
     will be created.
@@ -1560,8 +1573,8 @@ def save_structure_to_file(structure: JsonExportable, filename: str) -> None:
 
 
 def load_structure_from_file(context: InstaloaderContext, filename: str) -> JsonExportable:
-    """Loads a :class:`Post`, :class:`Profile`, :class:`StoryItem` or :class:`Hashtag` from a '.json' or '.json.xz' file
-    that has been saved by :func:`save_structure_to_file`.
+    """Loads a :class:`Post`, :class:`Profile`, :class:`StoryItem`, :class:`Hashtag` or :class:`FrozenNodeIterator` from
+    a '.json' or '.json.xz' file that has been saved by :func:`save_structure_to_file`.
 
     :param context: :attr:`Instaloader.context` linked to the new object, used for additional queries if neccessary.
     :param filename: Filename, ends in '.json' or '.json.xz'

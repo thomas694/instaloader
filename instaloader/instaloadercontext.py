@@ -33,7 +33,7 @@ def copy_session(session: requests.Session, request_timeout: Optional[float] = N
 
 def default_user_agent() -> str:
     return 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 ' \
-           '(KHTML, like Gecko) Chrome/88.0.4324.96 Safari/537.36'
+           '(KHTML, like Gecko) Chrome/89.0.4389.90 Safari/537.36'
 
 
 class InstaloaderContext:
@@ -53,7 +53,8 @@ class InstaloaderContext:
 
     def __init__(self, sleep: bool = True, quiet: bool = False, user_agent: Optional[str] = None,
                  max_connection_attempts: int = 3, request_timeout: float = 300.0,
-                 rate_controller: Optional[Callable[["InstaloaderContext"], "RateController"]] = None):
+                 rate_controller: Optional[Callable[["InstaloaderContext"], "RateController"]] = None,
+                 fatal_status_codes: Optional[List[int]] = None):
 
         self.user_agent = user_agent if user_agent is not None else default_user_agent()
         self.request_timeout = request_timeout
@@ -73,6 +74,9 @@ class InstaloaderContext:
 
         # Can be set to True for testing, disables supression of InstaloaderContext._error_catcher
         self.raise_all_errors = False
+
+        # HTTP status codes that should cause an AbortDownloadException
+        self.fatal_status_codes = fatal_status_codes or []
 
         # Cache profile from id (mapping from id to Profile)
         self.profile_id_cache = dict()           # type: Dict[int, Any]
@@ -218,8 +222,10 @@ class InstaloaderContext:
                              data={'enc_password': enc_password, 'username': user}, allow_redirects=True)
         try:
             resp_json = login.json()
-        except json.decoder.JSONDecodeError:
-            raise ConnectionException("Login error: JSON decode fail, {} - {}.".format(login.status_code, login.reason))
+        except json.decoder.JSONDecodeError as err:
+            raise ConnectionException(
+                "Login error: JSON decode fail, {} - {}.".format(login.status_code, login.reason)
+            ) from err
         if resp_json.get('two_factor_required'):
             two_factor_session = copy_session(session, self.request_timeout)
             two_factor_session.headers.update({'X-CSRFToken': csrf_token})
@@ -316,6 +322,11 @@ class InstaloaderContext:
             if is_other_query:
                 self._rate_controller.wait_before_query('other')
             resp = sess.get('https://{0}/{1}'.format(host, path), params=params, allow_redirects=False)
+            if resp.status_code in self.fatal_status_codes:
+                redirect = " redirect to {}".format(resp.headers['location']) if 'location' in resp.headers else ""
+                raise AbortDownloadException("Query to https://{}/{} responded with \"{} {}\"{}".format(
+                    host, path, resp.status_code, resp.reason, redirect
+                ))
             while resp.is_redirect:
                 redirect_url = resp.headers['location']
                 self.log('\nHTTP redirect from https://{0}/{1} to {2}'.format(host, path, redirect_url))
