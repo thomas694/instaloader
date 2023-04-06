@@ -406,6 +406,9 @@ def main():
                         help='Do not attempt to download iPhone version of images and videos.')
 
     g_misc = parser.add_argument_group('Miscellaneous Options')
+    g_misc.add_argument('--correct-timestamps', action='store_true',
+                        help='Set the modification dates of already downloaded files to the post\'s date. '
+                             'This is handy for updating backups downloaded with erroneous tools.')
     g_misc.add_argument('-q', '--quiet', action='store_true',
                         help='Disable user interaction, i.e. do not print messages (except errors) and fail '
                              'if login credentials are needed but not given. This makes Instaloader suitable as a '
@@ -466,7 +469,8 @@ def main():
                              fatal_status_codes=args.abort_on,
                              iphone_support=not args.no_iphone,
                              title_pattern=args.title_pattern,
-                             sanitize_paths=args.sanitize_paths)
+                             sanitize_paths=args.sanitize_paths,
+                             correct_timestamps=args.correct_timestamps)
         _main(loader,
               args.profile,
               username=args.login.lower() if args.login is not None else None,

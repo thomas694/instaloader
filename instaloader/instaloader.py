@@ -202,6 +202,7 @@ class Instaloader:
     :param fatal_status_codes: :option:`--abort-on`
     :param iphone_support: not :option:`--no-iphone`
     :param sanitize_paths: :option:`--sanitize-paths`
+    :param correct_timestamps: :option:`--correct-timestamps`
 
     .. attribute:: context
 
@@ -232,7 +233,8 @@ class Instaloader:
                  fatal_status_codes: Optional[List[int]] = None,
                  iphone_support: bool = True,
                  title_pattern: Optional[str] = None,
-                 sanitize_paths: bool = False):
+                 sanitize_paths: bool = False,
+                 correct_timestamps: bool = False):
 
         self.context = InstaloaderContext(sleep, quiet, user_agent, max_connection_attempts,
                                           request_timeout, rate_controller, fatal_status_codes,
@@ -263,6 +265,7 @@ class Instaloader:
             else storyitem_metadata_txt_pattern
         self.resume_prefix = resume_prefix
         self.check_resume_bbd = check_resume_bbd
+        self.correct_timestamps = correct_timestamps
 
         self.slide = slide or ""
         self.slide_start = 0
@@ -314,7 +317,8 @@ class Instaloader:
             slide=self.slide,
             fatal_status_codes=self.context.fatal_status_codes,
             iphone_support=self.context.iphone_support,
-            sanitize_paths=self.sanitize_paths)
+            sanitize_paths=self.sanitize_paths,
+            correct_timestamps=self.correct_timestamps)
         yield new_loader
         self.context.error_log.extend(new_loader.context.error_log)
         new_loader.context.error_log = []  # avoid double-printing of errors
@@ -351,7 +355,15 @@ class Instaloader:
         else:
             filename = nominal_filename
         if filename != nominal_filename and os.path.isfile(filename):
-            self.context.log(filename + ' exists', end=' ', flush=True)
+            if self.correct_timestamps:
+                ftime = os.path.getmtime(filename)
+                if ftime != mtime.timestamp():
+                    os.utime(filename, (datetime.now().timestamp(), mtime.timestamp()))
+                    self.context.log(filename + ' exists, updated time', end=' ', flush=True)
+                else:
+                    self.context.log(filename + ' exists', end=' ', flush=True)
+            else:
+                self.context.log(filename + ' exists', end=' ', flush=True)
             return False
         self.context.write_raw(resp, filename)
         os.utime(filename, (datetime.now().timestamp(), mtime.timestamp()))
