@@ -369,6 +369,18 @@ class Instaloader:
         os.utime(filename, (datetime.now().timestamp(), mtime.timestamp()))
         return True
 
+    def load_metadata_json(self, filename: str) -> JsonExportable:
+        """Load metadata JSON file of a structure."""
+        if self.compress_json:
+            filename += '.json.xz'
+        else:
+            filename += '.json'
+        if Path(filename).is_file():
+            structure = load_structure_from_file(self.context, filename)
+            if isinstance(structure, (Post, StoryItem)):
+                return structure
+        return None
+
     def save_metadata_json(self, filename: str, structure: JsonExportable) -> None:
         """Saves metadata JSON file of a structure."""
         if self.compress_json:
@@ -713,6 +725,10 @@ class Instaloader:
         downloaded = True
         if post.typename == 'GraphSidecar':
             if self.download_pictures or self.download_videos:
+                if self.save_metadata and post.has_sidecar_video:
+                    postloaded = self.load_metadata_json(filename)
+                    if postloaded is not None:
+                        post = postloaded
                 if not _all_already_downloaded(
                         filename_template, enumerate(
                             (post.get_is_videos()[i]
