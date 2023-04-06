@@ -1,3 +1,48 @@
+.. |ss| raw:: html
+
+   <strike>
+
+.. |se| raw:: html
+
+   </strike>
+
+Forked version
+--------------
+
+This is the (from time to time) updated fork of the `original version <https://github.com/instaloader/instaloader>`__ plus changes that I needed for myself.
+So far they are:
+
+- 200 api requests/hr (000-follow-api-limits-better)
+
+  - IG allows only 200 api calls per hour for non-logged in users
+  
+- Set the modification dates of already downloaded files to the post's date (000-correct-timestamps)
+
+  - New option ``--correct-timestamps``
+  - Set the modification dates of already downloaded files to the post's date.
+  - This is handy for updating backups downloaded with erroneous tools.
+
+- Add functionality to do iterator backups after every page load (000-do-regular-iterator-backups)
+
+  - If Instaloader is stopped by anything except Ctrl+C, the current state isn't saved and Instaloader starts at the first post again.
+  - The new code saves the iterator's state, before a new page is loaded.
+  - Attention: It interferes with the option ``--fast-update`` and should be implemented as an additional option that should be used only while doing your initial download of the profile and not on later updates.
+
+- |ss| Update the query_hash for post downloads (000-new-query_hash-for-post-downloads) |se|
+
+  - |ss| It's necessary because for the old query_hash IG isn't returning the full structure any more. |se|
+
+- Load existing GraphSidecar json instead of downloading again (000-reload-graphsidecar-json)
+
+  - Previously for every GraphSidecar node that had videos in it, a graph query was executed.
+  - Instead of downloading that json again, just load it from disk if it has been downloaded and saved before.
+  - Note: It doesn't get updates (caption, tags, location or alt text) for historic posts, but that's something I was not intereseted in.
+  - Update: The original version has been updated with a new query_hash and for now it doesn't do these many additional queries.
+
+|
+|
+|
+
 .. image:: https://raw.githubusercontent.com/instaloader/instaloader/master/docs/logo_heading.png
 
 .. badges-start

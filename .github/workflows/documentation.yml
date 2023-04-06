@@ -21,11 +21,11 @@ jobs:
           pipenv --python `python --version | grep -Eo '3\.[0-9]+'` sync --dev
       - name: "Build Documentation"
         run: pipenv --python `python --version | grep -Eo '3\.[0-9]+'` run make -C docs html SPHINXOPTS="-W -n"
-      - name: "Deploy Documentation"
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        uses: JamesIves/github-pages-deploy-action@v4.2.5
-        with:
-          branch: master
-          repository-name: instaloader/instaloader.github.io
-          folder: docs/_build/html
-          token: ${{ secrets.PAGES_DEPLOYMENT_TOKEN }}
+#      - name: "Deploy Documentation"
+#        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+#        uses: JamesIves/github-pages-deploy-action@v4.2.5
+#        with:
+#          branch: master
+#          repository-name: instaloader/instaloader.github.io
+#          folder: docs/_build/html
+#          token: ${{ secrets.PAGES_DEPLOYMENT_TOKEN }}
