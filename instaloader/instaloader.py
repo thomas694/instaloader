@@ -548,7 +548,7 @@ class Instaloader:
         .. versionadded:: 4.3"""
 
         http_response = self.context.get_raw(url)
-        date_object = None  # type: Optional[datetime]
+        date_object: Optional[datetime] = None
         if 'Last-Modified' in http_response.headers:
             date_object = datetime.strptime(http_response.headers["Last-Modified"], '%a, %d %b %Y %H:%M:%S GMT')
             date_object = date_object.replace(tzinfo=timezone.utc)
@@ -608,6 +608,23 @@ class Instaloader:
 
         .. versionadded:: 4.4"""
         self.download_title_pic(hashtag.profile_pic_url, '#' + hashtag.name, 'profile_pic', None)
+
+    @_requires_login
+    def save_session(self) -> dict:
+        """Saves internally stored :class:`requests.Session` object to :class:`dict`.
+
+        :raises LoginRequiredException: If called without being logged in.
+
+        .. versionadded:: 4.10
+        """
+        return self.context.save_session()
+
+    def load_session(self, username: str, session_data: dict) -> None:
+        """Internally stores :class:`requests.Session` object from :class:`dict`.
+
+        .. versionadded:: 4.10
+        """
+        self.context.load_session(username, session_data)
 
     @_requires_login
     def save_session_to_file(self, filename: Optional[str] = None) -> None:
@@ -740,7 +757,7 @@ class Instaloader:
                             post.get_sidecar_nodes(self.slide_start, self.slide_end),
                             start=self.slide_start % post.mediacount + 1
                     ):
-                        suffix = str(edge_number)  # type: Optional[str]
+                        suffix: Optional[str] = str(edge_number)
                         if '{filename}' in self.filename_pattern:
                             suffix = None
                         if self.download_pictures and (not sidecar_node.is_video or self.download_video_thumbnails):
@@ -973,11 +990,11 @@ class Instaloader:
         """
         for user_highlight in self.get_highlights(user):
             name = user_highlight.owner_username
-            highlight_target = (filename_target
+            highlight_target: Union[str, Path] = (filename_target
                                 if filename_target
                                 else (Path(_PostPathFormatter.sanitize_path(name, self.sanitize_paths)) /
                                       _PostPathFormatter.sanitize_path(user_highlight.title,
-                                                                       self.sanitize_paths)))  # type: Union[str, Path]
+                                                                       self.sanitize_paths)))
             self.context.log("Retrieving highlights \"{}\" from profile {}".format(user_highlight.title, name))
             self.download_highlight_cover(user_highlight, highlight_target)
             totalcount = user_highlight.itemcount
@@ -1002,7 +1019,8 @@ class Instaloader:
                             max_count: Optional[int] = None,
                             total_count: Optional[int] = None,
                             owner_profile: Optional[Profile] = None,
-                            takewhile: Optional[Callable[[Post], bool]] = None) -> None:
+                            takewhile: Optional[Callable[[Post], bool]] = None,
+                            possibly_pinned: int = 0) -> None:
         """
         Download the Posts returned by given Post Iterator.
 
@@ -1014,6 +1032,9 @@ class Instaloader:
         .. versionchanged:: 4.8
            Add `takewhile` parameter.
 
+        .. versionchanged:: 4.10.3
+           Add `possibly_pinned` parameter.
+
         :param posts: Post Iterator to loop through.
         :param target: Target name.
         :param fast_update: :option:`--fast-update`.
@@ -1022,6 +1043,8 @@ class Instaloader:
         :param total_count: Total number of posts returned by given iterator.
         :param owner_profile: Associated profile, if any.
         :param takewhile: Expression evaluated for each post. Once it returns false, downloading stops.
+        :param possibly_pinned: Number of posts that might be pinned. These posts do not cause download
+               to stop even if they've already been downloaded.
         """
         displayed_count = (max_count if total_count is None or max_count is not None and max_count < total_count
                            else total_count)
@@ -1043,7 +1066,7 @@ class Instaloader:
         ) as (is_resuming, start_index):
             for number, post in enumerate(posts, start=start_index + 1):
                 should_stop = not takewhile(post)
-                if should_stop and post.is_pinned:
+                if should_stop and number <= possibly_pinned:
                     continue
                 if (max_count is not None and number > max_count) or should_stop:
                     break
@@ -1077,7 +1100,7 @@ class Instaloader:
                         except PostChangedException:
                             post_changed = True
                             continue
-                    if fast_update and not downloaded and not post_changed and not post.is_pinned:
+                    if fast_update and not downloaded and not post_changed and number > possibly_pinned:
                         # disengage fast_update for first post when resuming
                         if not is_resuming or number > 0:
                             break
@@ -1499,7 +1522,7 @@ class Instaloader:
                     posts_to_download = profile.get_posts()
                     self.posts_download_loop(posts_to_download, profile_name, fast_update, post_filter,
                                              total_count=profile.mediacount, owner_profile=profile,
-                                             takewhile=posts_takewhile)
+                                             takewhile=posts_takewhile, possibly_pinned=3)
                     if latest_stamps is not None and posts_to_download.first_item is not None:
                         latest_stamps.set_last_post_timestamp(profile_name,
                                                               posts_to_download.first_item.date_local)

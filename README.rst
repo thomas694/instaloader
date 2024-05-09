@@ -169,7 +169,7 @@ Supporters
 .. current-sponsors-start
 
 | Instaloader is proudly sponsored by
-|  `@socialmethod <https://github.com/socialmethod>`__
+|  `@rocketapi-io <https://github.com/rocketapi-io>`__
 
 See `Alex' GitHub Sponsors <https://github.com/sponsors/aandergr>`__ page for
 how you can sponsor the development of Instaloader!
