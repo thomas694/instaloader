@@ -98,7 +98,7 @@ So far they are:
 ::
 
     instaloader [--comments] [--geotags]
-                [--stories] [--highlights] [--tagged] [--igtv]
+                [--stories] [--highlights] [--tagged] [--reels] [--igtv]
                 [--login YOUR-USERNAME] [--fast-update]
                 profile | "#hashtag" | :stories | :feed | :saved
 
